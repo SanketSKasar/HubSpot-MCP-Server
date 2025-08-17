@@ -1,7 +1,8 @@
 # HubSpot MCP Server
 
 [![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-Available-brightgreen?logo=github)](https://github.com/SanketSKasar/HubSpot-MCP-Server/pkgs/container/hubspot-mcp-server)
-[![Docker Hub](https://img.shields.io/badge/docker.hub-Coming%20Soon-orange?logo=docker)](https://hub.docker.com/r/sanketskasar/hubspot-mcp-server)
+[![Docker Hub](https://img.shields.io/badge/docker.hub-Available-brightgreen?logo=docker)](https://hub.docker.com/r/sanketskasar/hubspot-mcp-server)
+[![Docker Pulls](https://img.shields.io/docker/pulls/sanketskasar/hubspot-mcp-server?logo=docker)](https://hub.docker.com/r/sanketskasar/hubspot-mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-20.12.0-green?logo=node.js)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Multi--Stage-blue?logo=docker)](https://docker.com/)
@@ -12,11 +13,11 @@
 ## 📦 Available Images
 
 | Registry | Image | Status | Command |
-|----------|-------|--------|---------|
+|----------|-------|--------|---------| 
 | **GitHub Container Registry** | `ghcr.io/sanketskasar/hubspot-mcp-server:latest` | ✅ **Available** | `docker pull ghcr.io/sanketskasar/hubspot-mcp-server:latest` |
-| **Docker Hub** | `sanketskasar/hubspot-mcp-server:latest` | 🚧 Coming Soon | `docker pull sanketskasar/hubspot-mcp-server:latest` |
+| **Docker Hub** | `sanketskasar/hubspot-mcp-server:latest` | ✅ **Available** | `docker pull sanketskasar/hubspot-mcp-server:latest` |
 
-> **Note:** Currently using GitHub Container Registry. Docker Hub mirror coming soon!
+> **✨ Both registries are fully operational! Choose your preferred registry.**
 
 ## Features
 
@@ -41,7 +42,7 @@ Create a Private App in HubSpot Settings → Integrations → Private Apps with 
 
 ### 2. Run Container
 
-**🟢 Currently Available (GitHub Container Registry):**
+**Option 1: GitHub Container Registry**
 ```bash
 docker run -d \
   --name hubspot-mcp-server \
@@ -51,7 +52,7 @@ docker run -d \
   ghcr.io/sanketskasar/hubspot-mcp-server:latest
 ```
 
-**🟡 Coming Soon (Docker Hub):**
+**Option 2: Docker Hub**
 ```bash
 docker run -d \
   --name hubspot-mcp-server \
@@ -278,10 +279,10 @@ docker build -t hubspot-mcp-server .
 version: '3.8'
 services:
   hubspot-mcp-server:
-    # ✅ Currently Available - GitHub Container Registry
+    # Option 1: GitHub Container Registry
     image: ghcr.io/sanketskasar/hubspot-mcp-server:latest
     
-    # 🚧 Coming Soon - Docker Hub
+    # Option 2: Docker Hub (uncomment to use)
     # image: sanketskasar/hubspot-mcp-server:latest
     
     container_name: hubspot-mcp-server
@@ -534,8 +535,10 @@ npm run lint
 ### Staying Updated
 
 ```bash
-# Pull latest image
-docker pull ghcr.io/sanketskasar/hubspot-mcp-server:latest
+# Pull latest image (choose your preferred registry)
+docker pull ghcr.io/sanketskasar/hubspot-mcp-server:latest  # GitHub Container Registry
+# OR
+docker pull sanketskasar/hubspot-mcp-server:latest          # Docker Hub
 
 # Restart with new image
 docker-compose pull && docker-compose up -d
