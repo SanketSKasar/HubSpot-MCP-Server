@@ -1,0 +1,236 @@
+# =============================================================================
+# HubSpot MCP Server - Docker Compose Configuration
+# =============================================================================
+# 
+# This Docker Compose file provides different configurations for:
+# - Development environment with hot reload
+# - Production environment with optimized settings
+# - Testing environment for CI/CD
+# 
+# Usage:
+#   Development: docker-compose up dev
+#   Production:  docker-compose up prod
+#   Testing:     docker-compose up test
+# 
+# =============================================================================
+
+version: '3.8'
+
+# -----------------------------------------------------------------------------
+# Shared Configuration
+# -----------------------------------------------------------------------------
+x-common-variables: &common-variables
+  PORT: 3000
+  HOST: 0.0.0.0
+  NODE_ENV: production
+  LOG_LEVEL: info
+  APP_NAME: hubspot-mcp-server
+  APP_VERSION: 1.0.0
+  HUBSPOT_API_URL: https://api.hubapi.com
+  CORS_ORIGIN: localhost
+  MAX_REQUEST_SIZE: 10485760
+  GRACEFUL_SHUTDOWN_TIMEOUT: 10000
+  TZ: UTC
+
+x-common-healthcheck: &common-healthcheck
+  test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 60s
+
+# -----------------------------------------------------------------------------
+# Services
+# -----------------------------------------------------------------------------
+services:
+  
+  # Development Service
+  hubspot-mcp-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: hubspot-mcp-dev
+    environment:
+      <<: *common-variables
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      CORS_ORIGIN: "*"
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+      - "9229:9229"  # Debug port
+    volumes:
+      - ./src:/app/src:ro
+      - ./package.json:/app/package.json:ro
+      - node_modules_dev:/app/node_modules
+      - logs_dev:/var/log/app
+    healthcheck:
+      <<: *common-healthcheck
+    restart: unless-stopped
+    networks:
+      - hubspot-mcp-network
+    profiles:
+      - dev
+      - development
+
+  # Production Service
+  hubspot-mcp-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: hubspot-mcp-prod
+    environment:
+      <<: *common-variables
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=512"
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - logs_prod:/var/log/app:rw
+    healthcheck:
+      <<: *common-healthcheck
+    restart: always
+    networks:
+      - hubspot-mcp-network
+    profiles:
+      - prod
+      - production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /run:noexec,nosuid,size=50m
+
+  # Test Service (for CI/CD)
+  hubspot-mcp-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: hubspot-mcp-test
+    environment:
+      <<: *common-variables
+      NODE_ENV: test
+      LOG_LEVEL: error
+      HUBSPOT_PRIVATE_APP_ACCESS_TOKEN: test_token_for_ci
+    command: npm test
+    volumes:
+      - ./tests:/app/tests:ro
+      - ./src:/app/src:ro
+      - node_modules_test:/app/node_modules
+    networks:
+      - hubspot-mcp-network
+    profiles:
+      - test
+      - testing
+
+  # Security Scan Service
+  hubspot-mcp-security:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: security-scan
+    container_name: hubspot-mcp-security
+    command: /bin/sh -c "npm audit --audit-level=high && echo 'Security scan completed'"
+    volumes:
+      - security_reports:/app/reports
+    profiles:
+      - security
+      - scan
+
+  # Monitoring Service (Optional - for production monitoring)
+  hubspot-mcp-monitor:
+    image: prom/prometheus:latest
+    container_name: hubspot-mcp-monitor
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - hubspot-mcp-network
+    profiles:
+      - monitoring
+      - prod
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  hubspot-mcp-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  node_modules_dev:
+    driver: local
+  node_modules_test:
+    driver: local
+  logs_dev:
+    driver: local
+  logs_prod:
+    driver: local
+  security_reports:
+    driver: local
+  prometheus_data:
+    driver: local
+
+# -----------------------------------------------------------------------------
+# Development Commands
+# -----------------------------------------------------------------------------
+# 
+# Start development environment:
+#   docker-compose --profile dev up --build
+# 
+# Start production environment:
+#   docker-compose --profile prod up --build -d
+# 
+# Run tests:
+#   docker-compose --profile test up --build --abort-on-container-exit
+# 
+# Run security scan:
+#   docker-compose --profile security up --build --abort-on-container-exit
+# 
+# View logs:
+#   docker-compose logs -f hubspot-mcp-prod
+# 
+# Scale production (if needed):
+#   docker-compose --profile prod up --scale hubspot-mcp-prod=3
+# 
+# Clean up:
+#   docker-compose down --volumes --remove-orphans
+# 
+# =============================================================================

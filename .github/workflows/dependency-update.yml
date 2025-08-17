@@ -1,0 +1,298 @@
+# =============================================================================
+# Automated Dependency Updates
+# =============================================================================
+#
+# This workflow automatically:
+# - Updates npm dependencies
+# - Updates Docker base images
+# - Creates pull requests for security updates
+# - Runs tests to ensure compatibility
+#
+# =============================================================================
+
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      update_type:
+        description: 'Type of update to perform'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # NPM Dependency Updates
+  # ---------------------------------------------------------------------------
+  npm-updates:
+    name: Update NPM Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.10.0'
+          cache: 'npm'
+
+      - name: Install npm-check-updates
+        run: npm install -g npm-check-updates
+
+      - name: Check for outdated packages
+        id: outdated
+        run: |
+          echo "## Outdated Packages" > outdated.md
+          ncu >> outdated.md || true
+          if ncu --errorLevel 2; then
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update dependencies
+        if: steps.outdated.outputs.has_updates == 'true'
+        run: |
+          # Update based on input or default to patch
+          UPDATE_TYPE="${{ github.event.inputs.update_type || 'patch' }}"
+          
+          case $UPDATE_TYPE in
+            "patch")
+              ncu -u --target patch
+              ;;
+            "minor")
+              ncu -u --target minor
+              ;;
+            "major")
+              ncu -u
+              ;;
+          esac
+
+      - name: Install updated dependencies
+        if: steps.outdated.outputs.has_updates == 'true'
+        run: npm install
+
+      - name: Run tests
+        if: steps.outdated.outputs.has_updates == 'true'
+        run: npm test
+
+      - name: Run security audit
+        if: steps.outdated.outputs.has_updates == 'true'
+        run: npm audit --audit-level=moderate
+
+      - name: Create Pull Request
+        if: steps.outdated.outputs.has_updates == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update npm dependencies'
+          title: 'chore: update npm dependencies'
+          body: |
+            ## 🔄 Automated Dependency Update
+            
+            This PR updates npm dependencies to their latest compatible versions.
+            
+            ### Changes
+            - Updated dependencies as per npm-check-updates
+            - All tests are passing
+            - Security audit completed successfully
+            
+            ### Verification
+            - [ ] All tests pass
+            - [ ] Security audit clean
+            - [ ] Docker build successful
+            - [ ] Manual testing completed
+            
+            ---
+            *This PR was created automatically by the dependency update workflow.*
+          branch: chore/update-npm-dependencies
+          delete-branch: true
+
+  # ---------------------------------------------------------------------------
+  # Docker Base Image Updates
+  # ---------------------------------------------------------------------------
+  docker-updates:
+    name: Update Docker Base Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for Node.js updates
+        id: node-update
+        run: |
+          # Get current Node.js version from Dockerfile
+          CURRENT_VERSION=$(grep -o 'node:[0-9\.]*' Dockerfile | head -1 | cut -d':' -f2)
+          
+          # Get latest LTS version
+          LATEST_LTS=$(curl -s https://nodejs.org/dist/index.json | jq -r '[.[] | select(.lts != false)] | .[0].version' | sed 's/v//')
+          
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "latest_lts=$LATEST_LTS" >> $GITHUB_OUTPUT
+          
+          if [ "$CURRENT_VERSION" != "$LATEST_LTS" ]; then
+            echo "has_update=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_update=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Dockerfile
+        if: steps.node-update.outputs.has_update == 'true'
+        run: |
+          CURRENT="${{ steps.node-update.outputs.current_version }}"
+          LATEST="${{ steps.node-update.outputs.latest_lts }}"
+          
+          # Update Dockerfile
+          sed -i "s/node:${CURRENT}/node:${LATEST}/g" Dockerfile
+          
+          # Update package.json volta settings
+          sed -i "s/\"node\": \"${CURRENT}\"/\"node\": \"${LATEST}\"/g" package.json
+
+      - name: Test Docker build
+        if: steps.node-update.outputs.has_update == 'true'
+        run: |
+          docker build --target production -t test-image .
+          docker run --rm test-image node --version
+
+      - name: Create Pull Request for Docker updates
+        if: steps.node-update.outputs.has_update == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update Node.js to ${{ steps.node-update.outputs.latest_lts }}'
+          title: 'chore: update Node.js base image to ${{ steps.node-update.outputs.latest_lts }}'
+          body: |
+            ## 🐳 Docker Base Image Update
+            
+            This PR updates the Node.js base image to the latest LTS version.
+            
+            ### Changes
+            - Updated from Node.js ${{ steps.node-update.outputs.current_version }} to ${{ steps.node-update.outputs.latest_lts }}
+            - Updated Dockerfile base images
+            - Updated package.json volta configuration
+            
+            ### Verification
+            - [ ] Docker build successful
+            - [ ] Container starts correctly
+            - [ ] All tests pass
+            - [ ] Security scan clean
+            
+            ---
+            *This PR was created automatically by the dependency update workflow.*
+          branch: chore/update-docker-base-image
+          delete-branch: true
+
+  # ---------------------------------------------------------------------------
+  # Security Updates
+  # ---------------------------------------------------------------------------
+  security-updates:
+    name: Security Vulnerability Updates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.10.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for security vulnerabilities
+        id: audit
+        run: |
+          if npm audit --audit-level=moderate --json > audit-results.json; then
+            echo "has_vulnerabilities=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_vulnerabilities=true" >> $GITHUB_OUTPUT
+            echo "## Security Vulnerabilities Found" > security-report.md
+            npm audit --audit-level=moderate >> security-report.md || true
+          fi
+
+      - name: Fix security vulnerabilities
+        if: steps.audit.outputs.has_vulnerabilities == 'true'
+        run: |
+          # Try to fix automatically
+          npm audit fix --force
+          
+          # Check if vulnerabilities remain
+          if npm audit --audit-level=moderate; then
+            echo "All vulnerabilities fixed automatically"
+          else
+            echo "Some vulnerabilities require manual intervention"
+          fi
+
+      - name: Run tests after security fixes
+        if: steps.audit.outputs.has_vulnerabilities == 'true'
+        run: npm test
+
+      - name: Create Security Update PR
+        if: steps.audit.outputs.has_vulnerabilities == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'security: fix npm security vulnerabilities'
+          title: '🔒 Security: Fix npm vulnerabilities'
+          body: |
+            ## 🔒 Security Vulnerability Fix
+            
+            This PR addresses security vulnerabilities found in npm dependencies.
+            
+            ### Security Report
+            ```
+            $(cat security-report.md)
+            ```
+            
+            ### Actions Taken
+            - Ran `npm audit fix --force`
+            - Updated vulnerable dependencies
+            - Verified all tests still pass
+            
+            ### ⚠️ Important
+            This is a **security update** and should be reviewed and merged promptly.
+            
+            ### Verification
+            - [ ] Security audit passes
+            - [ ] All tests pass
+            - [ ] Docker build successful
+            - [ ] Manual security review completed
+            
+            ---
+            *This PR was created automatically by the security update workflow.*
+          branch: security/fix-npm-vulnerabilities
+          delete-branch: true
+          labels: security,urgent
+
+  # ---------------------------------------------------------------------------
+  # Dependency Summary
+  # ---------------------------------------------------------------------------
+  summary:
+    name: Dependency Update Summary
+    runs-on: ubuntu-latest
+    needs: [npm-updates, docker-updates, security-updates]
+    if: always()
+    steps:
+      - name: Create summary
+        run: |
+          echo "## 📊 Dependency Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Update Type | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| NPM Dependencies | ${{ needs.npm-updates.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Base Images | ${{ needs.docker-updates.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Updates | ${{ needs.security-updates.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the pull requests tab for any pending updates." >> $GITHUB_STEP_SUMMARY

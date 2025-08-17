@@ -1,0 +1,43 @@
+{
+  "name": "hubspot-mcp-server-complete",
+  "version": "1.0.0",
+  "description": "Complete MCP (Model Context Protocol) server implementing all 21 endpoints for HubSpot CRM integration",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "jest --detectOpenHandles --forceExit",
+    "lint": "eslint src/ --fix",
+    "prestart": "node -e \"if (!process.env.HUBSPOT_PRIVATE_APP_ACCESS_TOKEN) { console.error('Error: HUBSPOT_PRIVATE_APP_ACCESS_TOKEN is required'); process.exit(1); }\""
+  },
+  "keywords": [
+    "hubspot",
+    "mcp",
+    "model-context-protocol",
+    "json-rpc",
+    "api",
+    "crm",
+    "docker",
+    "enterprise"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/hubspot-mcp-server-docker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/hubspot-mcp-server-docker/issues"
+  },
+  "homepage": "https://github.com/yourusername/hubspot-mcp-server-docker#readme",
+  "dependencies": {
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "eslint": "^8.56.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
