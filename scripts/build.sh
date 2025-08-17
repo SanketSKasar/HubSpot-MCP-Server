@@ -50,6 +50,7 @@ MULTI_ARCH=false
 REGISTRY_GHCR="ghcr.io"
 REGISTRY_DOCKER="docker.io"
 IMAGE_NAME="hubspot-mcp-server"
+GITHUB_USERNAME_LOWER="sanketskasar"
 
 # Colors for output
 RED='\033[0;31m'
@@ -220,22 +221,7 @@ setup_buildx() {
 
 # Generate build labels
 generate_labels() {
-    cat << EOF
---label org.opencontainers.image.created="$BUILD_DATE"
---label org.opencontainers.image.version="$VERSION"
---label org.opencontainers.image.revision="$GIT_COMMIT"
---label org.opencontainers.image.title="HubSpot MCP Server"
---label org.opencontainers.image.description="Docker container for HubSpot MCP Server"
---label org.opencontainers.image.source="https://github.com/${GITHUB_USERNAME:-yourusername}/hubspot-mcp-server-docker"
---label org.opencontainers.image.url="https://github.com/${GITHUB_USERNAME:-yourusername}/hubspot-mcp-server-docker"
---label org.opencontainers.image.vendor="Your Organization"
---label org.opencontainers.image.licenses="MIT"
---label org.opencontainers.image.documentation="https://github.com/${GITHUB_USERNAME:-yourusername}/hubspot-mcp-server-docker/blob/main/README.md"
---label maintainer="${MAINTAINER:-contact@yourdomain.com}"
---label build.environment="$ENVIRONMENT"
---label build.git-commit="$GIT_COMMIT"
---label build.date="$BUILD_DATE"
-EOF
+    echo "--label org.opencontainers.image.created=\"$BUILD_DATE\" --label org.opencontainers.image.version=\"$VERSION\" --label org.opencontainers.image.revision=\"$GIT_COMMIT\" --label org.opencontainers.image.title=\"HubSpot MCP Server\" --label org.opencontainers.image.description=\"Docker container for HubSpot MCP Server\" --label org.opencontainers.image.source=\"https://github.com/${GITHUB_USERNAME:-SanketSKasar}/HubSpot-MCP-Server\" --label org.opencontainers.image.url=\"https://github.com/${GITHUB_USERNAME:-SanketSKasar}/HubSpot-MCP-Server\" --label org.opencontainers.image.vendor=\"Your Organization\" --label org.opencontainers.image.licenses=\"MIT\" --label org.opencontainers.image.documentation=\"https://github.com/${GITHUB_USERNAME:-SanketSKasar}/HubSpot-MCP-Server/blob/main/README.md\" --label maintainer=\"${MAINTAINER:-contact@yourdomain.com}\" --label build.environment=\"$ENVIRONMENT\" --label build.git-commit=\"$GIT_COMMIT\" --label build.date=\"$BUILD_DATE\""
 }
 
 # Build Docker image
@@ -261,7 +247,7 @@ build_image() {
     fi
     
     # Generate image tags
-    local ghcr_tag="${REGISTRY_GHCR}/${GITHUB_USERNAME:-yourusername}/${IMAGE_NAME}:${TAG}"
+    local ghcr_tag="${REGISTRY_GHCR}/${GITHUB_USERNAME_LOWER:-sanketskasar}/${IMAGE_NAME}:${TAG}"
     local docker_tag="${REGISTRY_DOCKER}/${DOCKER_USERNAME:-yourusername}/${IMAGE_NAME}:${TAG}"
     
     # Build command
@@ -305,7 +291,7 @@ run_security_scan() {
     if [ "$SCAN" = true ]; then
         log_info "Running security scan..."
         
-        local image_tag="${REGISTRY_GHCR}/${GITHUB_USERNAME:-yourusername}/${IMAGE_NAME}:${TAG}"
+        local image_tag="${REGISTRY_GHCR}/${GITHUB_USERNAME_LOWER:-sanketskasar}/${IMAGE_NAME}:${TAG}"
         
         # Run Trivy scan if available
         if command -v trivy &> /dev/null; then
@@ -328,7 +314,7 @@ run_security_scan() {
 test_image() {
     log_info "Testing the built image..."
     
-    local image_tag="${REGISTRY_GHCR}/${GITHUB_USERNAME:-yourusername}/${IMAGE_NAME}:${TAG}"
+    local image_tag="${REGISTRY_GHCR}/${GITHUB_USERNAME_LOWER:-sanketskasar}/${IMAGE_NAME}:${TAG}"
     
     # Test 1: Container starts successfully
     log_info "Test 1: Container startup"
