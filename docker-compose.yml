@@ -77,10 +77,14 @@ services:
 
   # Production Service
   hubspot-mcp-prod:
+    # Option 1: Build locally
     build:
       context: .
       dockerfile: Dockerfile
       target: production
+    # Option 2: Use published image (comment out 'build' section above and uncomment one below)
+    # image: ghcr.io/sanketskasar/hubspot-mcp-server:latest
+    # image: sanketskasar/hubspot-mcp-server:latest
     container_name: hubspot-mcp-prod
     environment:
       <<: *common-variables
@@ -232,5 +236,12 @@ volumes:
 # 
 # Clean up:
 #   docker-compose down --volumes --remove-orphans
+# 
+# Using published images instead of building:
+#   1. Comment out the 'build' section in hubspot-mcp-prod service
+#   2. Uncomment one of the image lines:
+#      - image: ghcr.io/sanketskasar/hubspot-mcp-server:latest  (GitHub Container Registry)
+#      - image: sanketskasar/hubspot-mcp-server:latest          (Docker Hub)
+#   3. Run: docker-compose --profile prod up -d
 # 
 # =============================================================================

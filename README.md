@@ -1,6 +1,7 @@
 # HubSpot MCP Server
 
-[![Docker Hub](https://img.shields.io/docker/pulls/yourusername/hubspot-mcp-server)](https://hub.docker.com/r/yourusername/hubspot-mcp-server)
+[![Docker Hub](https://img.shields.io/docker/pulls/sanketskasar/hubspot-mcp-server)](https://hub.docker.com/r/sanketskasar/hubspot-mcp-server)
+[![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-sanketskasar%2Fhubspot--mcp--server-blue)](https://github.com/SanketSKasar/HubSpot-MCP-Server/pkgs/container/hubspot-mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A complete Model Context Protocol (MCP) server for HubSpot CRM integration, implementing all 21 MCP protocol endpoints over HTTP using JSON-RPC 2.0.
@@ -18,12 +19,21 @@ A complete Model Context Protocol (MCP) server for HubSpot CRM integration, impl
 1. **Get HubSpot Token**: Create a Private App in HubSpot Settings → Integrations → Private Apps
 2. **Run Container**:
    ```bash
+   # Option 1: From GitHub Container Registry (GHCR)
    docker run -d \
      --name hubspot-mcp-server \
      -p 3000:3000 \
      -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token_here \
      --restart unless-stopped \
-     yourusername/hubspot-mcp-server:latest
+     ghcr.io/sanketskasar/hubspot-mcp-server:latest
+
+   # Option 2: From Docker Hub
+   docker run -d \
+     --name hubspot-mcp-server \
+     -p 3000:3000 \
+     -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token_here \
+     --restart unless-stopped \
+     sanketskasar/hubspot-mcp-server:latest
    ```
 3. **Test**: `curl http://localhost:3000/health`
 
@@ -96,8 +106,8 @@ curl -X POST http://localhost:3000/ \
 ## Build from Source
 
 ```bash
-git clone https://github.com/yourusername/hubspot-mcp-server
-cd hubspot-mcp-server
+git clone https://github.com/SanketSKasar/HubSpot-MCP-Server.git
+cd HubSpot-MCP-Server
 docker build -t hubspot-mcp-server .
 ```
 
@@ -107,7 +117,10 @@ docker build -t hubspot-mcp-server .
 version: '3.8'
 services:
   hubspot-mcp-server:
-    image: yourusername/hubspot-mcp-server:latest
+    # Option 1: Use GitHub Container Registry
+    image: ghcr.io/sanketskasar/hubspot-mcp-server:latest
+    # Option 2: Use Docker Hub
+    # image: sanketskasar/hubspot-mcp-server:latest
     ports:
       - "3000:3000"
     environment:
