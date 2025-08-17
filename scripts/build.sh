@@ -51,6 +51,7 @@ REGISTRY_GHCR="ghcr.io"
 REGISTRY_DOCKER="docker.io"
 IMAGE_NAME="hubspot-mcp-server"
 GITHUB_USERNAME_LOWER="sanketskasar"
+DOCKER_USERNAME_LOWER="sanketskasar"
 
 # Colors for output
 RED='\033[0;31m'
@@ -248,17 +249,15 @@ build_image() {
     
     # Generate image tags
     local ghcr_tag="${REGISTRY_GHCR}/${GITHUB_USERNAME_LOWER:-sanketskasar}/${IMAGE_NAME}:${TAG}"
-    local docker_tag="${REGISTRY_DOCKER}/${DOCKER_USERNAME:-yourusername}/${IMAGE_NAME}:${TAG}"
+    local docker_tag="${REGISTRY_DOCKER}/${DOCKER_USERNAME_LOWER:-sanketskasar}/${IMAGE_NAME}:${TAG}"
     
     # Build command
     local build_cmd="docker buildx build"
     build_cmd="$build_cmd --target $ENVIRONMENT"
     build_cmd="$build_cmd --tag $ghcr_tag"
     
-    # Add Docker Hub tag if username is provided
-    if [ -n "${DOCKER_USERNAME:-}" ]; then
-        build_cmd="$build_cmd --tag $docker_tag"
-    fi
+    # Add Docker Hub tag
+    build_cmd="$build_cmd --tag $docker_tag"
     
     build_cmd="$build_cmd $platforms"
     build_cmd="$build_cmd $(generate_labels)"
@@ -277,9 +276,7 @@ build_image() {
         log_success "Docker image built successfully"
         log_info "Image tags:"
         log_info "  - $ghcr_tag"
-        if [ -n "${DOCKER_USERNAME:-}" ]; then
-            log_info "  - $docker_tag"
-        fi
+        log_info "  - $docker_tag"
     else
         log_error "Docker build failed"
         exit 1
