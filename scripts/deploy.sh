@@ -285,7 +285,7 @@ generate_docker_config() {
 docker run -d \\
     --name hubspot-mcp-server-$ENVIRONMENT \\
     --restart unless-stopped \\
-    -p 3000:3000 \\
+    -p \${HOST_PORT:-3000}:\${CONTAINER_PORT:-3000} \\
     -e NODE_ENV=$ENVIRONMENT \\
     -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=\${HUBSPOT_PRIVATE_APP_ACCESS_TOKEN} \\
     -e LOG_LEVEL=info \\
@@ -337,7 +337,7 @@ services:
     secrets:
       - hubspot_token
     ports:
-      - "3000:3000"
+      - "\${HOST_PORT:-3000}:\${CONTAINER_PORT:-3000}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s

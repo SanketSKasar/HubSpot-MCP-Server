@@ -16,18 +16,19 @@ services:
     restart: always
     
     ports:
-      - "3000:3000"
+      - "${HOST_PORT:-3000}:${CONTAINER_PORT:-3000}"    # Configurable port mapping
     
     environment:
       # Required - HubSpot Private App Access Token
-      HUBSPOT_PRIVATE_APP_ACCESS_TOKEN: ""
+      HUBSPOT_PRIVATE_APP_ACCESS_TOKEN: "${HUBSPOT_PRIVATE_APP_ACCESS_TOKEN}"
       
-      # Server Configuration
-      PORT: 3000
+      # Transport Configuration
+      TRANSPORT: http                           # http, streamable-http, stdio
+      PORT: ${CONTAINER_PORT:-3000}             # Configurable container port
       HOST: 0.0.0.0
-      NODE_ENV: production
       
       # Application Settings
+      NODE_ENV: production
       APP_NAME: hubspot-mcp-server
       APP_VERSION: 1.0.0
       LOG_LEVEL: info
@@ -35,21 +36,33 @@ services:
       # HubSpot API Configuration
       HUBSPOT_API_URL: https://api.hubapi.com
       
-      # Security & Performance
-      CORS_ORIGIN: localhost
-      MAX_REQUEST_SIZE: 10485760
-      GRACEFUL_SHUTDOWN_TIMEOUT: 10000
-      NODE_OPTIONS: "--max-old-space-size=512"
+      # Security & CORS Configuration
+      CORS_ORIGIN: "*"                         # localhost, *, or specific domain
+      MAX_REQUEST_SIZE: 10485760               # 10MB
       
-      # System
+      # Session Management
+      MAX_CONNECTIONS: 100
+      SESSION_TIMEOUT: 3600                    # seconds
+      
+      # Rate Limiting
+      RATE_LIMIT_TOOLS: 60                     # requests per minute
+      RATE_LIMIT_RESOURCES: 30                 # requests per minute
+      MAX_CONCURRENT_REQUESTS: 10              # per session
+      
+      # Connection Configuration
+      CONNECTION_TIMEOUT: 30000                # milliseconds
+      GRACEFUL_SHUTDOWN_TIMEOUT: 10000         # milliseconds
+      
+      # System Configuration
+      NODE_OPTIONS: "--max-old-space-size=512"
       TZ: UTC
     
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${CONTAINER_PORT:-3000}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 30s
     
     # Resource limits (optional)
     deploy:
@@ -77,6 +90,30 @@ services:
 
 # Usage:
 #   1. Set HUBSPOT_PRIVATE_APP_ACCESS_TOKEN in environment section above
-#   2. Run: docker-compose up -d
-#   3. Access: http://localhost:3000/health
-#   4. Stop: docker-compose down
+#   2. Configure ports via HOST_PORT and CONTAINER_PORT environment variables
+#   3. Configure transport type (http, streamable-http, stdio) via TRANSPORT env var
+#   4. Run: docker-compose up -d
+#   5. Access endpoints:
+#      - Health: http://localhost:${HOST_PORT:-3000}/health
+#      - Ready: http://localhost:${HOST_PORT:-3000}/ready
+#      - Metrics: http://localhost:${HOST_PORT:-3000}/metrics
+#      - Status: http://localhost:${HOST_PORT:-3000}/status
+#      - MCP HTTP: http://localhost:${HOST_PORT:-3000}/mcp/
+#      - MCP Stream: http://localhost:${HOST_PORT:-3000}/mcp/stream (if TRANSPORT=streamable-http)
+#   6. Stop: docker-compose down
+#
+# Port Configuration:
+#   - HOST_PORT: Port on host machine (default: 3000)
+#   - CONTAINER_PORT: Port inside container (default: 3000)
+#   - Example: HOST_PORT=8080 CONTAINER_PORT=3000 docker-compose up -d
+#
+# Transport Types:
+#   - http: Standard HTTP JSON-RPC 2.0 transport
+#   - streamable-http: HTTP with Server-sent events for real-time updates
+#   - stdio: Process-based communication (requires docker exec for interaction)
+#
+# Configuration Notes:
+#   - All environment variables and ports are configurable
+#   - Rate limiting and session management are built-in
+#   - Supports up to 100 concurrent sessions by default
+#   - Comprehensive logging and monitoring available

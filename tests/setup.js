@@ -10,7 +10,13 @@
 // Set test environment variables
 process.env.NODE_ENV = 'test';
 process.env.LOG_LEVEL = 'error'; // Reduce log noise during tests
-process.env.HUBSPOT_PRIVATE_APP_ACCESS_TOKEN = 'test_token_for_jest';
+process.env.HUBSPOT_PRIVATE_APP_ACCESS_TOKEN = 'pat-test-token-for-jest-testing';
+process.env.TRANSPORT = 'http';
+process.env.PORT = '0'; // Use random available port for tests
+process.env.MAX_CONNECTIONS = '10';
+process.env.SESSION_TIMEOUT = '300'; // 5 minutes for tests
+process.env.RATE_LIMIT_TOOLS = '1000'; // Higher limits for tests
+process.env.RATE_LIMIT_RESOURCES = '1000';
 
 // Increase timeout for slower operations
 jest.setTimeout(30000);
@@ -34,31 +40,59 @@ global.testUtils = {
   },
 
   /**
-   * Generate test MCP request data
+   * Generate test MCP JSON-RPC request
+   * @param {string} method - MCP method name
+   * @param {Object} params - Method parameters
+   * @param {number} id - Request ID
+   * @returns {Object}
+   */
+  createMCPRequest: (method, params = {}, id = 1) => {
+    return {
+      jsonrpc: '2.0',
+      id,
+      method,
+      params
+    };
+  },
+
+  /**
+   * Generate test session data
    * @param {Object} overrides - Override default values
    * @returns {Object}
    */
-  createMCPRequest: (overrides = {}) => {
+  createTestSession: (overrides = {}) => {
     return {
-      query: 'test query',
-      context: {
-        user: 'test-user',
-        timestamp: new Date().toISOString(),
-        ...overrides.context
-      },
+      id: 'test-session-' + Math.random().toString(36).substring(7),
+      clientInfo: { name: 'test-client', version: '1.0.0' },
+      createdAt: Date.now(),
+      lastActivity: Date.now(),
+      initialized: true,
       ...overrides
     };
   },
 
   /**
-   * Create mock response for testing
+   * Generate test tool call parameters
+   * @param {string} toolName - Name of the tool
+   * @param {Object} args - Tool arguments
+   * @returns {Object}
+   */
+  createToolCall: (toolName, args = {}) => {
+    return {
+      name: toolName,
+      arguments: args
+    };
+  },
+
+  /**
+   * Mock HubSpot API response
    * @param {Object} data - Response data
    * @returns {Object}
    */
-  createMockResponse: (data = {}) => {
+  createMockHubSpotResponse: (data = {}) => {
     return {
-      status: 'success',
-      timestamp: new Date().toISOString(),
+      results: Array.isArray(data) ? data : [data],
+      total: Array.isArray(data) ? data.length : 1,
       ...data
     };
   }
@@ -66,13 +100,16 @@ global.testUtils = {
 
 // Mock console methods in test environment to reduce noise
 const originalConsole = global.console;
+
+// Keep important console methods for debugging failures
 global.console = {
   ...originalConsole,
   log: jest.fn(),
   debug: jest.fn(),
   info: jest.fn(),
-  warn: jest.fn(),
-  error: originalConsole.error // Keep error logs for debugging failed tests
+  // Keep warn and error for debugging
+  warn: originalConsole.warn,
+  error: originalConsole.error
 };
 
 // Restore console after all tests
@@ -87,9 +124,6 @@ afterEach(() => {
   
   // Clear all mocks
   jest.clearAllMocks();
-  
-  // Reset modules if needed
-  jest.resetModules();
 });
 
 // Handle uncaught exceptions and unhandled rejections in tests
@@ -103,45 +137,6 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
-// Mock external dependencies that we don't want to call during tests
-jest.mock('@hubspot/mcp-server', () => ({
-  // Mock implementation of HubSpot MCP server
-  start: jest.fn().mockResolvedValue(true),
-  stop: jest.fn().mockResolvedValue(true),
-  process: jest.fn().mockImplementation((query, context) => {
-    return Promise.resolve({
-      status: 'success',
-      result: `Processed: ${query}`,
-      context
-    });
-  })
-}));
-
-// Mock Winston logger to prevent log files during tests
-jest.mock('winston', () => {
-  const mocked = {
-    format: {
-      combine: jest.fn(),
-      timestamp: jest.fn(),
-      errors: jest.fn(),
-      json: jest.fn(),
-      colorize: jest.fn(),
-      simple: jest.fn()
-    },
-    createLogger: jest.fn(() => ({
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      debug: jest.fn()
-    })),
-    transports: {
-      Console: jest.fn(),
-      File: jest.fn()
-    }
-  };
-  return mocked;
-});
-
 // Performance monitoring for tests
 let testStartTime;
 
@@ -152,9 +147,9 @@ beforeEach(() => {
 afterEach(() => {
   const testDuration = Date.now() - testStartTime;
   
-  // Warn about slow tests
-  if (testDuration > 5000) { // 5 seconds
-    console.warn(`Slow test detected: ${testDuration}ms`);
+  // Warn about slow tests (over 5 seconds)
+  if (testDuration > 5000) {
+    console.warn(`⚠️ Slow test detected: ${testDuration}ms`);
   }
 });
 
@@ -165,26 +160,57 @@ afterAll(() => {
   const finalMemory = process.memoryUsage();
   const memoryIncrease = finalMemory.heapUsed - initialMemory.heapUsed;
   
-  // Warn about potential memory leaks
-  if (memoryIncrease > 50 * 1024 * 1024) { // 50MB
-    console.warn(`Potential memory leak detected: ${Math.round(memoryIncrease / 1024 / 1024)}MB increase`);
+  // Warn about potential memory leaks (over 50MB increase)
+  if (memoryIncrease > 50 * 1024 * 1024) {
+    console.warn(`⚠️ Potential memory leak detected: ${Math.round(memoryIncrease / 1024 / 1024)}MB increase`);
   }
 });
 
-// Test database setup (if needed in the future)
-global.setupTestDatabase = async () => {
-  // This would set up a test database if the application used one
-  // For now, this is a placeholder for future expansion
-};
-
-global.teardownTestDatabase = async () => {
-  // This would clean up the test database
-  // For now, this is a placeholder for future expansion
+// Mock network requests to prevent external calls during tests
+global.mockNetworkRequests = () => {
+  // Mock fetch if available
+  if (global.fetch) {
+    global.fetch = jest.fn();
+  }
+  
+  // Mock https.request for our HubSpot client
+  const https = require('https');
+  const originalRequest = https.request;
+  
+  https.request = jest.fn().mockImplementation((options, callback) => {
+    // Create a mock response
+    const mockResponse = {
+      statusCode: 200,
+      headers: { 'content-type': 'application/json' },
+      on: jest.fn((event, handler) => {
+        if (event === 'data') {
+          handler(JSON.stringify({ results: [], total: 0 }));
+        } else if (event === 'end') {
+          handler();
+        }
+      })
+    };
+    
+    // Create a mock request object
+    const mockRequest = {
+      on: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(() => {
+        if (callback) callback(mockResponse);
+      })
+    };
+    
+    return mockRequest;
+  });
+  
+  // Restore after tests
+  afterAll(() => {
+    https.request = originalRequest;
+  });
 };
 
 // Export test utilities for use in test files
 module.exports = {
   testUtils: global.testUtils,
-  setupTestDatabase: global.setupTestDatabase,
-  teardownTestDatabase: global.teardownTestDatabase
+  mockNetworkRequests: global.mockNetworkRequests
 };

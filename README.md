@@ -5,457 +5,328 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/sanketskasar/hubspot-mcp-server?logo=docker)](https://hub.docker.com/r/sanketskasar/hubspot-mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-20.12.0-green?logo=node.js)](https://nodejs.org/)
-[![Docker](https://img.shields.io/badge/Docker-Multi--Stage-blue?logo=docker)](https://docker.com/)
+[![Docker](https://img.shields.io/badge/Docker-Multi--Arch-blue?logo=docker)](https://docker.com/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-21%20Endpoints-purple)](https://modelcontextprotocol.io/)
 
-🚀 A complete **Model Context Protocol (MCP)** server for HubSpot CRM integration, implementing all 21 MCP protocol endpoints over HTTP using JSON-RPC 2.0.
+🚀 A complete **Model Context Protocol (MCP)** server for HubSpot CRM integration, implementing all 21 MCP protocol endpoints with multi-transport support (HTTP, Streamable HTTP, STDIO) and flexible port configuration.
+
+## ✨ Features
+
+- **Complete MCP Protocol**: All 21 endpoints (initialize, tools, resources, prompts, notifications, logging)
+- **Multi-Transport Support**: HTTP JSON-RPC, Streamable HTTP (SSE), STDIO for process-based communication
+- **Comprehensive HubSpot Integration**: 15+ tools for contacts, companies, deals with full CRUD operations
+- **Session Management**: UUID-based sessions with timeout and rate limiting
+- **Production Ready**: Health checks, metrics, structured logging, graceful shutdown
+- **Security Hardened**: OWASP compliance, non-root execution, security headers
+- **Multi-Architecture**: Docker images for AMD64 and ARM64 platforms
+- **Flexible Port Configuration**: Configurable ports via build args and runtime environment variables
 
 ## 📦 Available Images
 
-| Registry | Image | Status | Command |
-|----------|-------|--------|---------| 
-| **GitHub Container Registry** | `ghcr.io/sanketskasar/hubspot-mcp-server:latest` | ✅ **Available** | `docker pull ghcr.io/sanketskasar/hubspot-mcp-server:latest` |
-| **Docker Hub** | `sanketskasar/hubspot-mcp-server:latest` | ✅ **Available** | `docker pull sanketskasar/hubspot-mcp-server:latest` |
-
-> **✨ Both registries are fully operational! Choose your preferred registry.**
-
-## Features
-
-- **Complete MCP Protocol**: All 21 endpoints (initialize, tools, resources, prompts, notifications, logging)
-- **HubSpot Integration**: 8 CRM tools for contacts, companies, and deals
-- **Enterprise Security**: OWASP compliance, container hardening, non-root execution
-- **Production Ready**: Health checks, structured logging, graceful shutdown
-- **Docker Native**: Multi-stage builds, minimal Alpine base, automatic restarts
+| Registry | Image | Command |
+|----------|-------|---------|
+| **GitHub Container Registry** | `ghcr.io/sanketskasar/hubspot-mcp-server:latest` | `docker pull ghcr.io/sanketskasar/hubspot-mcp-server:latest` |
+| **Docker Hub** | `sanketskasar/hubspot-mcp-server:latest` | `docker pull sanketskasar/hubspot-mcp-server:latest` |
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Docker installed on your system
-- HubSpot Private App Access Token ([Get one here](#hubspot-setup))
+- HubSpot Private App Access Token ([Setup Guide](#hubspot-setup))
 
-### 1. Get HubSpot Token
-Create a Private App in HubSpot Settings → Integrations → Private Apps with these scopes:
-- `crm.objects.contacts.read`
-- `crm.objects.contacts.write`
-- `crm.objects.companies.read`
-- `crm.objects.deals.read`
+### 1. Run Container
 
-### 2. Run Container
-
-**Option 1: GitHub Container Registry**
+**GitHub Container Registry (Recommended):**
 ```bash
 docker run -d \
   --name hubspot-mcp-server \
   -p 3000:3000 \
   -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token_here \
+  -e TRANSPORT=http \
   --restart unless-stopped \
   ghcr.io/sanketskasar/hubspot-mcp-server:latest
 ```
 
-**Option 2: Docker Hub**
+**Docker Hub:**
 ```bash
 docker run -d \
   --name hubspot-mcp-server \
   -p 3000:3000 \
   -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token_here \
+  -e TRANSPORT=http \
   --restart unless-stopped \
   sanketskasar/hubspot-mcp-server:latest
 ```
 
-### 3. Verify Installation
+**Custom Port Configuration:**
 ```bash
-# Check container status
-docker ps | grep hubspot-mcp-server
+# Use custom host port (e.g., 8080) while keeping container port as 3000
+docker run -d \
+  --name hubspot-mcp-server \
+  -p 8080:3000 \
+  -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token_here \
+  --restart unless-stopped \
+  ghcr.io/sanketskasar/hubspot-mcp-server:latest
 
-# Test health endpoint
+# Use custom container port (requires rebuild)
+docker build --build-arg EXPOSE_PORT=8080 -t hubspot-mcp-server:custom .
+docker run -d \
+  --name hubspot-mcp-server \
+  -p 8080:8080 \
+  -e PORT=8080 \
+  -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token_here \
+  hubspot-mcp-server:custom
+```
+
+### 2. Verify Installation
+```bash
+# Check health
 curl http://localhost:3000/health
 
 # Expected response:
-# {"status":"healthy","timestamp":"...","uptime":...,"version":"1.0.0"}
+# {"status":"healthy","uptime":...,"version":"1.0.0","sessions":0}
+
+# Check MCP capabilities
+curl -X POST http://localhost:3000/mcp/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"test"}}}'
+```
+
+## 🔧 Transport Protocols
+
+### HTTP Transport (Default)
+Standard JSON-RPC 2.0 over HTTP:
+```bash
+docker run -d -p 3000:3000 \
+  -e TRANSPORT=http \
+  -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token \
+  ghcr.io/sanketskasar/hubspot-mcp-server:latest
+```
+
+### Streamable HTTP Transport 
+Server-sent events for real-time updates:
+```bash
+docker run -d -p 3000:3000 \
+  -e TRANSPORT=streamable-http \
+  -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token \
+  ghcr.io/sanketskasar/hubspot-mcp-server:latest
+
+# Connect to stream
+curl -N -H "Accept: text/event-stream" http://localhost:3000/mcp/stream
+```
+
+### STDIO Transport
+Process-based communication:
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize"}' | \
+docker run --rm -i \
+  -e TRANSPORT=stdio \
+  -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token \
+  ghcr.io/sanketskasar/hubspot-mcp-server:latest
 ```
 
 ## ⚙️ Configuration
 
 ### Environment Variables
 
-Copy `env.example` to `.env` and configure:
-
 ```bash
-# ========================================
 # Required Configuration
-# ========================================
 HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token_here
 
-# ========================================
-# Optional Configuration (with defaults)
-# ========================================
-
-# Server Configuration
+# Transport Configuration
+TRANSPORT=http                    # http, streamable-http, stdio
 PORT=3000
 HOST=0.0.0.0
 
-# Environment
-NODE_ENV=production
-LOG_LEVEL=info
+# Session Management
+MAX_CONNECTIONS=100
+SESSION_TIMEOUT=3600              # seconds
 
-# HubSpot API
-HUBSPOT_API_URL=https://api.hubapi.com
+# Rate Limiting
+RATE_LIMIT_TOOLS=60              # requests per minute
+RATE_LIMIT_RESOURCES=30          # requests per minute  
+MAX_CONCURRENT_REQUESTS=10       # per session
 
 # Security
-CORS_ORIGIN=localhost
-MAX_REQUEST_SIZE=10485760
+CORS_ORIGIN=*                    # "*", specific domain, or comma-separated
+MAX_REQUEST_SIZE=10485760        # 10MB
 
-# Performance
-GRACEFUL_SHUTDOWN_TIMEOUT=10000
+# Operational
+LOG_LEVEL=info                   # debug, info, warn, error
+CONNECTION_TIMEOUT=30000         # milliseconds
+GRACEFUL_SHUTDOWN_TIMEOUT=10000  # milliseconds
 ```
 
-## 🔑 HubSpot Setup
+### Docker Compose
 
-### Step 1: Create a Private App
-
-1. **Go to HubSpot Settings:**
-   - In your HubSpot account, click the settings gear in the main navigation
-   - Navigate to **Integrations** → **Private Apps**
-
-2. **Create New Private App:**
-   - Click **"Create a private app"**
-   - Give it a name (e.g., "MCP Server Integration")
-   - Add a description
-
-3. **Configure Scopes:**
-   Select the following scopes in the **Scopes** tab:
-
-#### Required Scopes
-| Scope | Purpose |
-|-------|----------|
-| `crm.objects.contacts.read` | Read contact information |
-| `crm.objects.contacts.write` | Create and update contacts |
-| `crm.objects.companies.read` | Read company information |
-| `crm.objects.deals.read` | Read deal information |
-
-4. **Generate Token:**
-   - Go to the **Auth** tab
-   - Copy the **Access Token** (starts with `pat-...`)
-   - **⚠️ Keep this token secure!**
-
-### Step 2: Test Your Token
-
-```bash
-# Test the token works
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-     "https://api.hubapi.com/crm/v3/objects/contacts?limit=1"
-```
-
-### Step 3: Use with Docker
-
-```bash
-# Replace YOUR_TOKEN with your actual token
-docker run -d \
-  --name hubspot-mcp-server \
-  -p 3000:3000 \
-  -e HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=YOUR_TOKEN \
-  ghcr.io/sanketskasar/hubspot-mcp-server:latest
-```
-
-## API Usage
-
-All MCP endpoints are available at `http://localhost:3000/` using JSON-RPC 2.0:
-
-```bash
-# Initialize MCP session
-curl -X POST http://localhost:3000/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
-
-# List available tools
-curl -X POST http://localhost:3000/ \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
-
-# Call a tool
-curl -X POST http://localhost:3000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":3,
-    "method":"tools/call",
-    "params":{
-      "name":"get_contacts",
-      "arguments":{"limit":10}
-    }
-  }'
-```
-
-## 🛠️ Available Tools
-
-The server implements **8 HubSpot CRM tools** through the MCP protocol:
-
-### 👥 Contact Tools
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `get_contacts` | Retrieve contacts with pagination | `limit` (optional), `after` (optional) |
-| `search_contacts` | Search contacts by query | `query` (required), `limit` (optional) |
-| `get_contact_by_id` | Get specific contact details | `contact_id` (required) |
-| `create_contact` | Create new contacts | `email` (required), `properties` (optional) |
-
-### 🏢 Company Tools
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `get_companies` | Retrieve companies with pagination | `limit` (optional), `after` (optional) |
-| `get_company_by_id` | Get specific company details | `company_id` (required) |
-
-### 💼 Deal Tools
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `get_deals` | Retrieve deals from pipeline | `limit` (optional), `after` (optional) |
-| `get_deal_by_id` | Get specific deal details | `deal_id` (required) |
-
-### Example Tool Usage
-
-```bash
-# Get first 5 contacts
-curl -X POST http://localhost:3000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":1,
-    "method":"tools/call",
-    "params":{
-      "name":"get_contacts",
-      "arguments":{"limit":5}
-    }
-  }'
-
-# Search for contacts
-curl -X POST http://localhost:3000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":2,
-    "method":"tools/call",
-    "params":{
-      "name":"search_contacts",
-      "arguments":{"query":"john@example.com"}
-    }
-  }'
-
-# Create a new contact
-curl -X POST http://localhost:3000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc":"2.0",
-    "id":3,
-    "method":"tools/call",
-    "params":{
-      "name":"create_contact",
-      "arguments":{
-        "email":"new@example.com",
-        "properties":{
-          "firstname":"John",
-          "lastname":"Doe",
-          "company":"Example Corp"
-        }
-      }
-    }
-  }'
-```
-
-## Health Endpoints
-
-- `GET /health` - Container health check
-- `GET /ready` - Application readiness probe
-
-## Build from Source
-
-```bash
-git clone https://github.com/SanketSKasar/HubSpot-MCP-Server.git
-cd HubSpot-MCP-Server
-docker build -t hubspot-mcp-server .
-```
-
-## Docker Compose
-
+**Basic Configuration:**
 ```yaml
 version: '3.8'
 services:
   hubspot-mcp-server:
-    # Option 1: GitHub Container Registry
     image: ghcr.io/sanketskasar/hubspot-mcp-server:latest
-    
-    # Option 2: Docker Hub (uncomment to use)
-    # image: sanketskasar/hubspot-mcp-server:latest
-    
     container_name: hubspot-mcp-server
     ports:
-      - "3000:3000"
+      - "${HOST_PORT:-3000}:${CONTAINER_PORT:-3000}"
     environment:
-      - HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=${HUBSPOT_PRIVATE_APP_ACCESS_TOKEN}
-      - NODE_ENV=production
-      - LOG_LEVEL=info
+      HUBSPOT_PRIVATE_APP_ACCESS_TOKEN: ${HUBSPOT_PRIVATE_APP_ACCESS_TOKEN}
+      PORT: ${CONTAINER_PORT:-3000}
+      TRANSPORT: http
+      MAX_CONNECTIONS: 100
+      SESSION_TIMEOUT: 3600
+      RATE_LIMIT_TOOLS: 60
+      RATE_LIMIT_RESOURCES: 30
+      LOG_LEVEL: info
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${CONTAINER_PORT:-3000}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
 ```
 
-**Usage:**
+**Custom Port Configuration:**
 ```bash
-# Create .env file
-echo "HUBSPOT_PRIVATE_APP_ACCESS_TOKEN=your_token_here" > .env
+# Run on custom ports
+HOST_PORT=8080 CONTAINER_PORT=3000 docker-compose up -d
 
-# Start the service
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop the service
-docker-compose down
+# Or set in .env file:
+# HOST_PORT=8080
+# CONTAINER_PORT=3000
 ```
 
+## 🔑 HubSpot Setup
 
+### Step 1: Create Private App
+1. Go to **HubSpot Settings** → **Integrations** → **Private Apps**
+2. Click **"Create a private app"**
+3. Configure required scopes:
 
-## 🟡 Health Endpoints
+| Scope | Purpose |
+|-------|---------|
+| `crm.objects.contacts.read` | Read contact information |
+| `crm.objects.contacts.write` | Create and update contacts |
+| `crm.objects.companies.read` | Read company information |  
+| `crm.objects.companies.write` | Create and update companies |
+| `crm.objects.deals.read` | Read deal information |
+| `crm.objects.deals.write` | Create and update deals |
+| `crm.objects.owners.read` | Read owner/sales rep information |
 
-The server provides health check endpoints for monitoring:
+### Step 2: Generate Token
+1. Go to **Auth** tab
+2. Copy the **Access Token** (starts with `pat-...`)
+3. **⚠️ Keep this token secure!**
 
-### Available Endpoints
-
-| Endpoint | Purpose | Response |
-|----------|---------|----------|
-| `GET /health` | Container health check | Health status with uptime |
-| `GET /ready` | Application readiness probe | Readiness status |
-
-### Health Check Examples
-
+### Step 3: Test Token
 ```bash
-# Basic health check
-curl http://localhost:3000/health
-
-# Response:
-{
-  "status": "healthy",
-  "timestamp": "2025-01-17T12:00:00.000Z",
-  "uptime": 3600,
-  "version": "1.0.0",
-  "service": "hubspot-mcp-server",
-  "initialized": true
-}
-
-# Readiness probe
-curl http://localhost:3000/ready
-
-# Response:
-{
-  "status": "ready",
-  "timestamp": "2025-01-17T12:00:00.000Z"
-}
-```
-
-### Docker Health Checks
-
-The Docker image includes built-in health checks:
-
-```bash
-# Check container health
-docker ps --format "table {{.Names}}\t{{.Status}}"
-
-# View health check logs
-docker inspect hubspot-mcp-server | jq '.[0].State.Health'
-```
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-#### 1. Container Won't Start
-```bash
-# Check container logs
-docker logs hubspot-mcp-server
-
-# Common causes:
-# - Missing HUBSPOT_PRIVATE_APP_ACCESS_TOKEN
-# - Invalid token
-# - Port already in use
-```
-
-#### 2. Health Check Failing
-```bash
-# Test health endpoint manually
-curl -f http://localhost:3000/health
-
-# Check if container is running
-docker ps | grep hubspot-mcp-server
-
-# Restart container
-docker restart hubspot-mcp-server
-```
-
-#### 3. HubSpot API Errors
-```bash
-# Check your token permissions
 curl -H "Authorization: Bearer YOUR_TOKEN" \
      "https://api.hubapi.com/crm/v3/objects/contacts?limit=1"
-
-# Common HTTP status codes:
-# 401 - Invalid or expired token
-# 403 - Insufficient permissions
-# 429 - Rate limit exceeded
 ```
 
-#### 4. Performance Issues
+## 🛠️ Available Tools
+
+The server implements **15+ HubSpot CRM tools** through the MCP protocol:
+
+### Contact Management
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `get_contacts` | Retrieve contacts with pagination | `limit`, `properties`, `after` |
+| `create_contact` | Create new contact | `email` (required), other properties |
+| `update_contact` | Update existing contact | `id`, `properties` |
+| `search_contacts` | Search contacts by query | `query`, `properties`, `limit` |
+| `get_contact_by_email` | Get contact by email | `email` |
+
+### Company Management
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `get_companies` | Retrieve companies with pagination | `limit`, `properties`, `after` |
+| `create_company` | Create new company | `name` (required), other properties |
+| `update_company` | Update existing company | `id`, `properties` |
+| `search_companies` | Search companies by query | `query`, `properties`, `limit` |
+
+### Deal Management
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `get_deals` | Retrieve deals with pagination | `limit`, `properties`, `after` |
+| `create_deal` | Create new deal | `dealname` (required), other properties |
+| `update_deal` | Update existing deal | `id`, `properties` |
+| `search_deals` | Search deals by query | `query`, `properties`, `limit` |
+
+### Relationship & Activity Tools
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `get_associations` | Get object relationships | `objectId`, `objectType`, `toObjectType` |
+| `get_engagement_history` | Get activity timeline | `objectId`, `objectType` |
+
+## 📊 Resources
+
+**8+ Live Resources Available:**
+- `hubspot://contacts` - Live contacts database
+- `hubspot://companies` - Live companies database  
+- `hubspot://deals` - Live deals pipeline
+- `hubspot://properties/contacts` - Contact property schema
+- `hubspot://properties/companies` - Company property schema
+- `hubspot://properties/deals` - Deal property schema
+- `hubspot://pipelines/deals` - Deal pipeline configuration
+- `hubspot://owners` - Sales rep/owner information
+
+## 💡 Prompts
+
+**5+ Ready-to-Use Prompts:**
+- `analyze_pipeline` - Deal pipeline analysis and optimization
+- `contact_research` - Deep contact and company research
+- `lead_scoring` - Lead qualification and scoring
+- `email_templates` - HubSpot email template generation  
+- `meeting_prep` - Pre-meeting research and preparation
+
+## 📈 Monitoring & Health
+
+### Health Endpoints
+| Endpoint | Purpose | Response |
+|----------|---------|----------|
+| `GET /health` | Basic health check | Health status and uptime |
+| `GET /ready` | Readiness probe | Application readiness |
+| `GET /metrics` | Prometheus metrics | Performance metrics |
+| `GET /status` | Detailed status | Comprehensive server status |
+
+### Example Usage
 ```bash
-# Monitor container resources
-docker stats hubspot-mcp-server
+# Initialize session
+curl -X POST http://localhost:3000/mcp/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"client"}}}'
 
-# Check container logs for errors
-docker logs -f hubspot-mcp-server
+# List available tools
+curl -X POST http://localhost:3000/mcp/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"sessionId":"session-id"}}'
 
-# Adjust container resources if needed
-docker run --memory=1g --cpus=1 ...
+# Get contacts
+curl -X POST http://localhost:3000/mcp/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc":"2.0","id":3,"method":"tools/call",
+    "params":{
+      "name":"get_contacts",
+      "arguments":{"limit":5},
+      "sessionId":"session-id"
+    }
+  }'
 ```
 
-### Getting Help
+## 🔒 Security Features
 
-- 🐛 **Issues:** [Report bugs](https://github.com/SanketSKasar/HubSpot-MCP-Server/issues)
-- 💬 **Discussions:** [Ask questions](https://github.com/SanketSKasar/HubSpot-MCP-Server/discussions)
-- 📚 **Documentation:** [Complete guides](docs/)
-
-## 📊 Performance & Monitoring
-
-### Resource Requirements
-
-| Environment | CPU | Memory | Disk |
-|-------------|-----|--------|----- |
-| **Minimum** | 0.25 cores | 256MB | 1GB |
-| **Recommended** | 0.5 cores | 512MB | 2GB |
-| **High Load** | 1+ cores | 1GB+ | 5GB+ |
-
-### Monitoring
-
-```bash
-# Container metrics
-docker stats hubspot-mcp-server --no-stream
-
-# Application logs
-docker logs -f hubspot-mcp-server | jq .
-
-# Health monitoring
-while true; do
-  curl -s http://localhost:3000/health | jq '.status'
-  sleep 30
-done
-```
+- **Non-root execution** - Container runs as unprivileged user
+- **Security hardening** - Read-only filesystem, dropped capabilities  
+- **OWASP headers** - Complete security header implementation
+- **Session management** - UUID-based sessions with timeouts
+- **Rate limiting** - Configurable per-session rate limits
+- **Input validation** - Comprehensive parameter validation
 
 ## 🛠️ Development
 
 ### Local Development
-
 ```bash
-# Clone repository
 git clone https://github.com/SanketSKasar/HubSpot-MCP-Server.git
 cd HubSpot-MCP-Server
 
@@ -466,205 +337,129 @@ npm install
 cp env.example .env
 # Edit .env with your HubSpot token
 
-# Run locally
-npm start
+# Run with different transports
+npm start -- --transport http
+npm start -- --transport streamable-http  
+npm start -- --transport stdio
 
 # Run tests
 npm test
 
-# Lint code
-npm run lint
+# Build Docker image
+docker build -t hubspot-mcp-server .
 ```
 
-### Building Custom Images
+### Command Line Options
+```bash
+node src/server.js --help
+
+Options:
+  --transport, -t    Transport protocol (http|streamable-http|stdio)
+  --port, -p         Port to listen on (default: 3000)
+  --host, -h         Host to bind to (default: 0.0.0.0)
+  --log-level        Logging level (debug|info|warn|error)
+  --max-connections  Maximum concurrent connections
+  --session-timeout  Session timeout in seconds
+```
+
+## 📊 Performance
+
+### Resource Requirements
+| Environment | CPU | Memory | Concurrent Sessions |
+|-------------|-----|--------|-------------------|
+| **Minimum** | 0.25 cores | 256MB | 10 |
+| **Recommended** | 0.5 cores | 512MB | 50 |
+| **High Load** | 1+ cores | 1GB+ | 100+ |
+
+### Monitoring
+```bash
+# Container metrics
+docker stats hubspot-mcp-server
+
+# Application metrics  
+curl http://localhost:3000/metrics
+
+# Performance testing
+curl -w "@curl-format.txt" -o /dev/null -s http://localhost:3000/health
+```
+
+## 🚀 Building Multi-Architecture Images
 
 ```bash
-# Build development image
-./scripts/build.sh -e dev
+# Setup buildx for multi-arch
+docker buildx create --name multiarch --use
 
-# Build production image
-./scripts/build.sh -e prod
+# Build for multiple architectures with default port
+docker buildx build \
+  --build-arg EXPOSE_PORT=3000 \
+  --platform linux/amd64,linux/arm64 \
+  --tag ghcr.io/sanketskasar/hubspot-mcp-server:latest \
+  --tag sanketskasar/hubspot-mcp-server:latest \
+  --push .
 
-# Build and push to registries
-./scripts/build.sh -p
-
-# Multi-architecture build
-./scripts/build.sh -m
-
-# Build with security scan
-./scripts/build.sh -s
+# Build with custom port configuration
+docker buildx build \
+  --build-arg EXPOSE_PORT=8080 \
+  --platform linux/amd64,linux/arm64 \
+  --tag your-registry/hubspot-mcp-server:custom-port \
+  --push .
 ```
 
-## 🔒 Security
+## 🤝 Contributing
 
-### Security Features
-
-- ✅ **Non-root execution** - Container runs as unprivileged user
-- ✅ **Minimal base image** - Alpine Linux for reduced attack surface
-- ✅ **Security hardening** - Read-only filesystem, dropped capabilities
-- ✅ **Environment isolation** - Proper secret management
-- ✅ **Health monitoring** - Built-in health checks
-
-### Best Practices
-
-1. **Secure Token Storage:**
-   ```bash
-   # Use Docker secrets in production
-   echo "YOUR_TOKEN" | docker secret create hubspot_token -
-   
-   # Reference in compose file
-   secrets:
-     - hubspot_token
-   ```
-
-2. **Network Security:**
-   ```bash
-   # Run on custom network
-   docker network create hubspot-net
-   docker run --network hubspot-net ...
-   ```
-
-3. **Log Security:**
-   ```bash
-   # Avoid logging sensitive data
-   export LOG_LEVEL=warn  # Reduces verbose logging
-   ```
-
-## 🔄 Updates & Releases
-
-### Staying Updated
-
-```bash
-# Pull latest image (choose your preferred registry)
-docker pull ghcr.io/sanketskasar/hubspot-mcp-server:latest  # GitHub Container Registry
-# OR
-docker pull sanketskasar/hubspot-mcp-server:latest          # Docker Hub
-
-# Restart with new image
-docker-compose pull && docker-compose up -d
-
-# Check version
-curl http://localhost:3000/health | jq '.version'
-```
-
-### Release Notes
-
-- **v1.0.0** - Initial release with all 21 MCP endpoints
-- More releases coming soon...
-
-## 🔗 Related Projects
-
-- **[Model Context Protocol](https://modelcontextprotocol.io/)** - Official MCP specification
-- **[HubSpot API](https://developers.hubspot.com/docs/api/overview)** - HubSpot CRM API documentation
-- **[MCP Specification](https://spec.modelcontextprotocol.io/)** - Technical MCP protocol details
-
-## 🎆 Enhanced Contributing
-
-We welcome contributions! Here's how to get started:
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Quick Start
-
-1. **🔀 Fork** the repository
-2. **🌱 Create** a feature branch: `git checkout -b feature/amazing-feature`
-3. **✨ Commit** your changes: `git commit -m 'Add amazing feature'`
-4. **🚀 Push** to branch: `git push origin feature/amazing-feature`
-5. **🔄 Create** a Pull Request
-
-### Development Setup
-
-```bash
-# Fork and clone
-git clone https://github.com/YOUR_USERNAME/HubSpot-MCP-Server.git
-cd HubSpot-MCP-Server
-
-# Install dependencies
-npm install
-
-# Set up environment
-cp env.example .env
-# Add your HubSpot token to .env
-
-# Run tests
-npm test
-
-# Start development server
-npm start
-```
-
-### Contribution Guidelines
-
-- ✅ Follow existing code style
-- ✅ Add tests for new features
-- ✅ Update documentation
-- ✅ Ensure Docker builds work
-- ✅ Keep commits atomic and well-described
-
-### Areas for Contribution
-
-- 🐛 **Bug fixes** - Report and fix issues
-- ✨ **New features** - Add MCP tools or endpoints
-- 📚 **Documentation** - Improve guides and examples
-- 🔒 **Security** - Enhance security measures
-- 🎨 **UI/UX** - Better developer experience
-- 🎧 **Performance** - Optimize response times
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes and add tests
+4. Ensure all tests pass: `npm test`
+5. Submit a pull request
 
 ## 📜 License
 
-```text
-MIT License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-Copyright (c) 2025 SanketSKasar
+## 🔗 Related Resources
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-**View full license:** [LICENSE](LICENSE)
-
-## 📚 Documentation
-
-### 📋 Core Documentation
-
-| Document | Description | Link |
-|----------|-------------|----- |
-| **Complete MCP Guide** | Detailed protocol documentation | [docs/COMPLETE_MCP_GUIDE.md](docs/COMPLETE_MCP_GUIDE.md) |
-| **MCP Protocol Reference** | Technical specification | [docs/MCP_PROTOCOL_GUIDE.md](docs/MCP_PROTOCOL_GUIDE.md) |
-| **Development Scripts** | Testing and deployment utilities | [dev/](dev/) |
-| **Security Policy** | Security guidelines and reporting | [SECURITY.md](SECURITY.md) |
-| **Contributing Guide** | Contribution guidelines | [CONTRIBUTING.md](CONTRIBUTING.md) |
-
-### 🔗 External Resources
-
-- **[HubSpot API Documentation](https://developers.hubspot.com/docs/api/overview)** - Official HubSpot API docs
-- **[Model Context Protocol](https://modelcontextprotocol.io/)** - Official MCP website
-- **[MCP Specification](https://spec.modelcontextprotocol.io/)** - Technical protocol spec
-- **[Docker Documentation](https://docs.docker.com/)** - Docker usage guides
+- **[Model Context Protocol](https://modelcontextprotocol.io/)** - Official MCP specification
+- **[HubSpot API Documentation](https://developers.hubspot.com/docs/api/overview)** - HubSpot CRM API
+- **[MCP Protocol Specification](https://spec.modelcontextprotocol.io/)** - Technical MCP details
 
 ---
 
 <div align="center">
 
-**🎆 Built with ❤️ by [SanketSKasar](https://github.com/SanketSKasar)**
+## 📋 Latest Updates - Version 1.0.0
 
-**⭐ Star this repo if you find it helpful!**
+### **🎉 Production Release Features**
+- ✅ **Complete Multi-Transport Support**: HTTP, Streamable HTTP (SSE), and STDIO protocols
+- ✅ **Flexible Port Configuration**: Build-time and runtime port customization
+- ✅ **Enhanced Session Management**: UUID-based sessions with comprehensive rate limiting
+- ✅ **Multi-Architecture Images**: Native support for AMD64 and ARM64 platforms
+- ✅ **Production Hardening**: OWASP security compliance and comprehensive monitoring
+- ✅ **Streamlined Codebase**: Removed development components for production focus
+
+### **🌍 Registry Availability**
+- **GitHub Container Registry**: `ghcr.io/sanketskasar/hubspot-mcp-server:latest`
+- **Docker Hub**: `sanketskasar/hubspot-mcp-server:latest`
+- **Multi-Platform**: Both registries support AMD64 and ARM64 architectures
+
+### **🔧 Key Capabilities**
+- **21 MCP Protocol Endpoints**: Complete compliance with MCP Protocol Version 2024-11-05
+- **15+ HubSpot Tools**: Full CRUD operations for contacts, companies, and deals
+- **8+ Live Resources**: Real-time access to HubSpot CRM data and schemas
+- **5+ Ready-to-Use Prompts**: Business intelligence and automation templates
+- **Advanced Monitoring**: Health, readiness, metrics, and status endpoints
+- **Enterprise Security**: Non-root execution, security headers, rate limiting
+
+---
+
+<div align="center">
+
+**🎯 Built with ❤️ for the MCP ecosystem**
 
 [![GitHub stars](https://img.shields.io/github/stars/SanketSKasar/HubSpot-MCP-Server?style=social)](https://github.com/SanketSKasar/HubSpot-MCP-Server/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/SanketSKasar/HubSpot-MCP-Server?style=social)](https://github.com/SanketSKasar/HubSpot-MCP-Server/network/members)
 [![GitHub issues](https://img.shields.io/github/issues/SanketSKasar/HubSpot-MCP-Server)](https://github.com/SanketSKasar/HubSpot-MCP-Server/issues)
 
 </div>

@@ -1,7 +1,7 @@
 {
   "name": "hubspot-mcp-server-complete",
   "version": "1.0.0",
-  "description": "Complete MCP (Model Context Protocol) server implementing all 21 endpoints for HubSpot CRM integration",
+  "description": "Complete MCP (Model Context Protocol) server with multi-transport support for HubSpot CRM integration - implements all 21 MCP endpoints with HTTP, Streamable HTTP, and STDIO transports",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -17,20 +17,30 @@
     "api",
     "crm",
     "docker",
-    "enterprise"
+    "enterprise",
+    "multi-transport",
+    "http",
+    "sse",
+    "stdio",
+    "session-management",
+    "rate-limiting",
+    "multi-arch"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "SanketSKasar <contact@sanketskasar.dev>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/hubspot-mcp-server-docker.git"
+    "url": "git+https://github.com/SanketSKasar/HubSpot-MCP-Server.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/hubspot-mcp-server-docker/issues"
+    "url": "https://github.com/SanketSKasar/HubSpot-MCP-Server/issues"
   },
-  "homepage": "https://github.com/yourusername/hubspot-mcp-server-docker#readme",
+  "homepage": "https://github.com/SanketSKasar/HubSpot-MCP-Server#readme",
   "dependencies": {
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "yargs": "^17.7.2",
+    "uuid": "^9.0.1",
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "jest": "^29.7.0",

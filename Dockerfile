@@ -2,8 +2,8 @@
 # HubSpot MCP Server - Production Docker Image
 # =============================================================================
 # 
-# Multi-stage build for optimized, secure production container
-# Implements MCP (Model Context Protocol) over HTTP with HubSpot integration
+# Optimized, secure production container for MCP (Model Context Protocol) 
+# implementation with HubSpot integration and configurable ports
 # 
 # Security features: Non-root execution, minimal base image, hardened configuration
 # 
@@ -19,7 +19,6 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install only production dependencies
-# Use npm install since no lock file is present
 RUN npm install --only=production --no-audit --no-fund
 
 # Production stage
@@ -50,7 +49,8 @@ COPY --chown=nodejs:nodejs package*.json ./
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=512"
 
-# Server configuration
+# Transport configuration - PORT is configurable via build args or runtime
+ENV TRANSPORT=http
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
@@ -65,21 +65,34 @@ ENV HUBSPOT_API_URL=https://api.hubapi.com
 ENV CORS_ORIGIN=localhost
 ENV MAX_REQUEST_SIZE=10485760
 
-# Operational configuration
+# Session management
+ENV MAX_CONNECTIONS=100
+ENV SESSION_TIMEOUT=3600
+
+# Rate limiting
+ENV RATE_LIMIT_TOOLS=60
+ENV RATE_LIMIT_RESOURCES=30
+ENV MAX_CONCURRENT_REQUESTS=10
+
+# Connection configuration
+ENV CONNECTION_TIMEOUT=30000
 ENV GRACEFUL_SHUTDOWN_TIMEOUT=10000
+
+# Build argument for configurable port (can be overridden at build time)
+ARG EXPOSE_PORT=3000
 
 # Switch to non-root user for security
 USER nodejs
 
-# Expose application port (documentation only)
-EXPOSE 3000
+# Expose configurable application port (can be set via build arg or environment)
+EXPOSE ${EXPOSE_PORT}
 
-# Add health check for container orchestration
+# Add health check for container orchestration with configurable port
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+    CMD curl -f http://localhost:${PORT:-3000}/health || exit 1
 
 # Use dumb-init for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the MCP server
+# Start the MCP server in production mode
 CMD ["node", "src/server.js"]
