@@ -225,6 +225,15 @@ curl -X POST http://localhost:3000/mcp/ \
   -d '{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}'
 ```
 
+**Using Authorization Bearer (Alternative method):**
+```bash
+# Use session ID as Bearer token
+curl -X POST http://localhost:3000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $session_id" \
+  -d '{"jsonrpc": "2.0", "id": 3, "method": "resources/list", "params": {}}'
+```
+
 **Using Cookies (Browser-compatible):**
 ```bash
 # Save cookies and reuse them
@@ -241,10 +250,12 @@ curl -b cookies.txt -X POST http://localhost:3000/mcp/ \
 ### Session Features
 - **Automatic Creation**: Sessions created transparently on first request
 - **Multiple Persistence Methods**: Headers, cookies, and body parameters
+- **aiohttp.ClientSession Compatible**: Optimized for Python HTTP clients
+- **Authorization Bearer Support**: Alternative session identification method
 - **Configurable Timeout**: Sessions expire after `SESSION_TIMEOUT` seconds
 - **Reconnection Support**: SSE transport allows session reconnection
 - **Rate Limiting**: Per-session rate limits for tools and resources
-- **Security**: HttpOnly cookies, SameSite protection, optional Secure flag
+- **Security**: SameSite protection, configurable secure flag for HTTPS
 
 ## 🔑 HubSpot Setup
 
@@ -498,6 +509,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### **🔧 Key Capabilities**
 - **21 MCP Protocol Endpoints**: Complete compliance with MCP Protocol Version 2024-11-05
+- **aiohttp.ClientSession Support**: Optimized session management for langchain_mcp_adapters
 - **15+ HubSpot Tools**: Full CRUD operations for contacts, companies, and deals
 - **8+ Live Resources**: Real-time access to HubSpot CRM data and schemas
 - **5+ Ready-to-Use Prompts**: Business intelligence and automation templates

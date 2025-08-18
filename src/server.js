@@ -1649,6 +1649,15 @@ class HTTPTransport extends Transport {
     let sessionId = null;
     let session = null;
     let isNewSession = false;
+    const requestInfo = {
+      url: req.url,
+      method: req.method,
+      userAgent: req.headers['user-agent'],
+      cookie: req.headers.cookie,
+      authorization: req.headers.authorization
+    };
+
+    Logger.debug('Session lookup attempt', requestInfo);
 
     // 1. Try to get session ID from various sources (in order of preference)
     
@@ -1658,11 +1667,28 @@ class HTTPTransport extends Transport {
       session = this.sessionManager.getSession(sessionId);
       if (session) {
         session.lastActivity = Date.now();
-        Logger.debug('HTTP session found via header', { sessionId });
+        Logger.info('HTTP session found via X-Session-ID header', { sessionId });
+      } else {
+        Logger.warn('Invalid session ID in X-Session-ID header', { sessionId });
       }
     }
 
-    // b) From mcp-session cookie (second priority)
+    // b) From Authorization Bearer header (second priority)
+    if (!session && req.headers.authorization) {
+      const authMatch = req.headers.authorization.match(/^Bearer\s+(.+)$/i);
+      if (authMatch) {
+        sessionId = authMatch[1];
+        session = this.sessionManager.getSession(sessionId);
+        if (session) {
+          session.lastActivity = Date.now();
+          Logger.info('HTTP session found via Authorization Bearer', { sessionId });
+        } else {
+          Logger.warn('Invalid session ID in Authorization Bearer', { sessionId });
+        }
+      }
+    }
+
+    // c) From mcp-session cookie (third priority)
     if (!session && req.headers.cookie) {
       const cookies = this.parseCookies(req.headers.cookie);
       sessionId = cookies['mcp-session'];
@@ -1670,12 +1696,15 @@ class HTTPTransport extends Transport {
         session = this.sessionManager.getSession(sessionId);
         if (session) {
           session.lastActivity = Date.now();
-          Logger.debug('HTTP session found via cookie', { sessionId });
+          Logger.info('HTTP session found via mcp-session cookie', { sessionId });
+        } else {
+          Logger.warn('Invalid session ID in mcp-session cookie', { sessionId });
         }
       }
+      Logger.debug('Cookie parsing result', { cookies, sessionId });
     }
 
-    // c) From request body sessionId parameter (third priority)
+    // d) From request body sessionId parameter (fourth priority)
     if (!session && req.body) {
       try {
         const body = JSON.parse(req.body);
@@ -1684,11 +1713,14 @@ class HTTPTransport extends Transport {
           session = this.sessionManager.getSession(sessionId);
           if (session) {
             session.lastActivity = Date.now();
-            Logger.debug('HTTP session found via body param', { sessionId });
+            Logger.info('HTTP session found via body param', { sessionId });
+          } else {
+            Logger.warn('Invalid session ID in body param', { sessionId });
           }
         }
       } catch (e) {
         // Ignore JSON parse errors for session lookup
+        Logger.debug('Failed to parse request body for session lookup', { error: e.message });
       }
     }
 
@@ -1705,8 +1737,19 @@ class HTTPTransport extends Transport {
       });
       sessionId = session.id;
       isNewSession = true;
-      Logger.info('HTTP session created', { sessionId, transport: 'http' });
+      Logger.info('HTTP session created', { 
+        sessionId, 
+        transport: 'http',
+        clientInfo: session.clientInfo
+      });
     }
+
+    Logger.info('Session resolution completed', {
+      sessionId,
+      isNewSession,
+      method: isNewSession ? 'created' : 'found',
+      activeSessions: this.sessionManager.sessions.size
+    });
 
     return {
       sessionId,
@@ -1722,28 +1765,31 @@ class HTTPTransport extends Transport {
     // Always set X-Session-ID header for client tracking
     res.setHeader('X-Session-ID', sessionId);
 
-    // Set session cookie for browser-based clients
+    // Set session cookie optimized for aiohttp.ClientSession compatibility
     const cookieOptions = [
       `mcp-session=${sessionId}`,
-      'Path=/',
+      'Path=/', // Ensure cookie applies to all paths
       `Max-Age=${CONFIG.sessionTimeout}`, // Use configured session timeout
-      'HttpOnly', // Prevent XSS access
       'SameSite=Lax' // CSRF protection while allowing cross-site navigation
     ];
 
-    // Add Secure flag if running on HTTPS (determined by headers or config)
-    if (process.env.NODE_ENV === 'production' || CONFIG.secure) {
+    // Note: Removed HttpOnly to allow aiohttp.ClientSession access
+    // Only add Secure flag for production HTTPS environments
+    if (process.env.NODE_ENV === 'production' && CONFIG.secure) {
       cookieOptions.push('Secure');
     }
 
     res.setHeader('Set-Cookie', cookieOptions.join('; '));
 
-    // Add CORS headers for session management
+    // Add comprehensive CORS headers for session management
     res.setHeader('Access-Control-Expose-Headers', 'X-Session-ID');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-    if (isNewSession) {
-      Logger.debug('HTTP session headers set', { sessionId, newSession: true });
-    }
+    Logger.debug('HTTP session headers set', { 
+      sessionId, 
+      newSession: isNewSession,
+      cookie: cookieOptions.join('; ')
+    });
   }
 
   // Parse cookies from Cookie header
