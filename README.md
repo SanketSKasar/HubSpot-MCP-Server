@@ -20,6 +20,7 @@
 - **Security Hardened**: OWASP compliance, non-root execution, security headers
 - **Multi-Architecture**: Docker images for AMD64 and ARM64 platforms
 - **Flexible Port Configuration**: Configurable ports via build args and runtime environment variables
+- **Advanced Session Management**: Cookie and header-based session persistence for HTTP requests
 
 ## 📦 Available Images
 
@@ -194,6 +195,56 @@ HOST_PORT=8080 CONTAINER_PORT=3000 docker-compose up -d
 # HOST_PORT=8080
 # CONTAINER_PORT=3000
 ```
+
+## 🔧 Session Management
+
+The server provides **advanced session management** for HTTP requests to maintain state across multiple API calls:
+
+### Session Creation
+Sessions are automatically created on the first request and tracked via:
+- **X-Session-ID Header**: Primary method for API clients
+- **mcp-session Cookie**: Browser-friendly session persistence  
+- **Request Body Parameter**: Alternative session identification
+
+### Session Persistence Examples
+
+**Using Headers (Recommended for API clients):**
+```bash
+# 1. Initialize and get session ID
+response=$(curl -s -i -X POST http://localhost:3000/mcp/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {...}}')
+
+# Extract session ID from X-Session-ID header
+session_id=$(echo "$response" | grep -i "x-session-id" | cut -d' ' -f2 | tr -d '\r')
+
+# 2. Use session ID in subsequent requests
+curl -X POST http://localhost:3000/mcp/ \
+  -H "Content-Type: application/json" \
+  -H "X-Session-ID: $session_id" \
+  -d '{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}'
+```
+
+**Using Cookies (Browser-compatible):**
+```bash
+# Save cookies and reuse them
+curl -c cookies.txt -X POST http://localhost:3000/mcp/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {...}}'
+
+# Subsequent requests with cookies
+curl -b cookies.txt -X POST http://localhost:3000/mcp/ \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 2, "method": "resources/list", "params": {}}'
+```
+
+### Session Features
+- **Automatic Creation**: Sessions created transparently on first request
+- **Multiple Persistence Methods**: Headers, cookies, and body parameters
+- **Configurable Timeout**: Sessions expire after `SESSION_TIMEOUT` seconds
+- **Reconnection Support**: SSE transport allows session reconnection
+- **Rate Limiting**: Per-session rate limits for tools and resources
+- **Security**: HttpOnly cookies, SameSite protection, optional Secure flag
 
 ## 🔑 HubSpot Setup
 

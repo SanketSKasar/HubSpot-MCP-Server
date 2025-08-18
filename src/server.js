@@ -1507,7 +1507,13 @@ class HTTPTransport extends Transport {
         const requestBody = await this.getRequestBody(req);
         const jsonRpcRequest = JSON.parse(requestBody);
 
-        const response = await this.handleMCPRequest(jsonRpcRequest);
+        // Handle session management for HTTP requests
+        const sessionContext = this.getOrCreateSession(req, res);
+        const response = await this.handleMCPRequest(jsonRpcRequest, sessionContext.sessionId);
+        
+        // Set session information in response headers
+        this.setSessionHeaders(res, sessionContext);
+        
         res.statusCode = 200;
         res.end(JSON.stringify(response));
         return;
@@ -1636,6 +1642,122 @@ class HTTPTransport extends Transport {
       req.on('end', () => resolve(body));
       req.on('error', reject);
     });
+  }
+
+  // Session management for HTTP requests
+  getOrCreateSession(req, res) {
+    let sessionId = null;
+    let session = null;
+    let isNewSession = false;
+
+    // 1. Try to get session ID from various sources (in order of preference)
+    
+    // a) From X-Session-ID header (highest priority)
+    sessionId = req.headers['x-session-id'];
+    if (sessionId) {
+      session = this.sessionManager.getSession(sessionId);
+      if (session) {
+        session.lastActivity = Date.now();
+        Logger.debug('HTTP session found via header', { sessionId });
+      }
+    }
+
+    // b) From mcp-session cookie (second priority)
+    if (!session && req.headers.cookie) {
+      const cookies = this.parseCookies(req.headers.cookie);
+      sessionId = cookies['mcp-session'];
+      if (sessionId) {
+        session = this.sessionManager.getSession(sessionId);
+        if (session) {
+          session.lastActivity = Date.now();
+          Logger.debug('HTTP session found via cookie', { sessionId });
+        }
+      }
+    }
+
+    // c) From request body sessionId parameter (third priority)
+    if (!session && req.body) {
+      try {
+        const body = JSON.parse(req.body);
+        if (body.params && body.params.sessionId) {
+          sessionId = body.params.sessionId;
+          session = this.sessionManager.getSession(sessionId);
+          if (session) {
+            session.lastActivity = Date.now();
+            Logger.debug('HTTP session found via body param', { sessionId });
+          }
+        }
+      } catch (e) {
+        // Ignore JSON parse errors for session lookup
+      }
+    }
+
+    // 2. Create new session if none found
+    if (!session) {
+      session = this.sessionManager.createSession({ 
+        transport: 'http',
+        clientInfo: {
+          userAgent: req.headers['user-agent'],
+          ip: req.connection.remoteAddress || req.socket.remoteAddress,
+          referer: req.headers.referer,
+          origin: req.headers.origin
+        }
+      });
+      sessionId = session.id;
+      isNewSession = true;
+      Logger.info('HTTP session created', { sessionId, transport: 'http' });
+    }
+
+    return {
+      sessionId,
+      session,
+      isNewSession
+    };
+  }
+
+  // Set session headers and cookies for HTTP responses
+  setSessionHeaders(res, sessionContext) {
+    const { sessionId, isNewSession } = sessionContext;
+
+    // Always set X-Session-ID header for client tracking
+    res.setHeader('X-Session-ID', sessionId);
+
+    // Set session cookie for browser-based clients
+    const cookieOptions = [
+      `mcp-session=${sessionId}`,
+      'Path=/',
+      `Max-Age=${CONFIG.sessionTimeout}`, // Use configured session timeout
+      'HttpOnly', // Prevent XSS access
+      'SameSite=Lax' // CSRF protection while allowing cross-site navigation
+    ];
+
+    // Add Secure flag if running on HTTPS (determined by headers or config)
+    if (process.env.NODE_ENV === 'production' || CONFIG.secure) {
+      cookieOptions.push('Secure');
+    }
+
+    res.setHeader('Set-Cookie', cookieOptions.join('; '));
+
+    // Add CORS headers for session management
+    res.setHeader('Access-Control-Expose-Headers', 'X-Session-ID');
+
+    if (isNewSession) {
+      Logger.debug('HTTP session headers set', { sessionId, newSession: true });
+    }
+  }
+
+  // Parse cookies from Cookie header
+  parseCookies(cookieHeader) {
+    const cookies = {};
+    if (cookieHeader) {
+      cookieHeader.split(';').forEach(cookie => {
+        const [name, value] = cookie.trim().split('=');
+        if (name && value) {
+          cookies[name] = decodeURIComponent(value);
+        }
+      });
+    }
+    return cookies;
   }
 }
 
