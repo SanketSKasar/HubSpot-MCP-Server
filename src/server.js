@@ -1177,6 +1177,61 @@ class MCPServer {
     };
   }
 
+  // Notification handlers
+  async handleInitialized(params, sessionId) {
+    if (!sessionId) {
+      Logger.warn('notifications/initialized received without session ID');
+      return;
+    }
+
+    const session = this.sessionManager.getSession(sessionId);
+    if (session) {
+      // Mark session as fully initialized
+      session.fullyInitialized = true;
+      session.lastActivity = Date.now();
+      Logger.info('Session fully initialized', { sessionId });
+    }
+  }
+
+  async handleCancelled(params, sessionId) {
+    Logger.debug('Cancellation notification received', { 
+      requestId: params?.requestId, 
+      reason: params?.reason,
+      sessionId 
+    });
+  }
+
+  async handleProgress(params, sessionId) {
+    Logger.debug('Progress notification received', { 
+      progress: params?.progress,
+      total: params?.total,
+      sessionId 
+    });
+  }
+
+  async handleMessage(params, sessionId) {
+    Logger.info('Message notification received', { 
+      message: params?.message,
+      level: params?.level,
+      sessionId 
+    });
+  }
+
+  async handleResourcesUpdated(params, sessionId) {
+    Logger.info('Resources updated notification received', { sessionId });
+    // Could trigger cache invalidation or refresh logic here
+  }
+
+  async handleToolsUpdated(params, sessionId) {
+    Logger.info('Tools updated notification received', { sessionId });
+    // Could trigger tool metadata refresh here
+  }
+
+  async handlePromptsUpdated(params, sessionId) {
+    Logger.info('Prompts updated notification received', { sessionId });
+    // Could trigger prompt metadata refresh here
+  }
+
   // Helper methods
   checkSessionAuth(sessionId) {
     if (!sessionId) return false;
@@ -1215,6 +1270,11 @@ class Transport {
         sessionId: finalSessionId, 
         requestId 
       });
+
+      // Handle notifications (no response expected)
+      if (method.startsWith('notifications/')) {
+        return this.handleNotification(method, params, finalSessionId);
+      }
 
       switch (method) {
         // Core Protocol
@@ -1316,6 +1376,65 @@ class Transport {
           data: { requestId }
         }
       };
+    }
+  }
+
+  async handleNotification(method, params, sessionId) {
+    const startTime = Date.now();
+    const requestId = uuidv4();
+
+    try {
+      Logger.debug('MCP notification received', { method, sessionId, requestId });
+
+      switch (method) {
+        case 'notifications/initialized':
+          await this.mcpServer.handleInitialized(params, sessionId);
+          break;
+        case 'notifications/cancelled':
+          await this.mcpServer.handleCancelled(params, sessionId);
+          break;
+        case 'notifications/progress':
+          await this.mcpServer.handleProgress(params, sessionId);
+          break;
+        case 'notifications/message':
+          await this.mcpServer.handleMessage(params, sessionId);
+          break;
+        case 'notifications/resourcesUpdated':
+          await this.mcpServer.handleResourcesUpdated(params, sessionId);
+          break;
+        case 'notifications/toolsUpdated':
+          await this.mcpServer.handleToolsUpdated(params, sessionId);
+          break;
+        case 'notifications/promptsUpdated':
+          await this.mcpServer.handlePromptsUpdated(params, sessionId);
+          break;
+        default:
+          Logger.warn('Unknown notification method', { method, sessionId });
+      }
+
+      const duration = Date.now() - startTime;
+      Logger.debug('MCP notification processed', { 
+        method, 
+        sessionId, 
+        requestId, 
+        duration: `${duration}ms` 
+      });
+
+      // Notifications don't return responses
+      return null;
+
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      Logger.error('MCP notification processing failed', { 
+        method, 
+        error: error.message, 
+        sessionId, 
+        requestId,
+        duration: `${duration}ms`
+      });
+      
+      // Notifications don't return error responses either
+      return null;
     }
   }
 }
@@ -1542,7 +1661,31 @@ class StreamableHTTPTransport extends HTTPTransport {
   }
 
   async handleSSEConnection(req, res) {
-    const sessionId = req.headers['x-session-id'] || uuidv4();
+    const providedSessionId = req.headers['x-session-id'];
+    let sessionId;
+    let session;
+
+    // If session ID provided, try to use existing session
+    if (providedSessionId) {
+      session = this.sessionManager.getSession(providedSessionId);
+      if (session) {
+        sessionId = providedSessionId;
+        Logger.info('SSE reconnecting to existing session', { sessionId });
+      }
+    }
+
+    // Create new session if none exists
+    if (!session) {
+      session = this.sessionManager.createSession({ 
+        transport: 'streamable-http',
+        clientInfo: {
+          userAgent: req.headers['user-agent'],
+          ip: req.connection.remoteAddress
+        }
+      });
+      sessionId = session.id;
+      Logger.info('SSE creating new session', { sessionId });
+    }
     
     // Set SSE headers
     res.writeHead(200, {
@@ -1550,22 +1693,52 @@ class StreamableHTTPTransport extends HTTPTransport {
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'Access-Control-Allow-Origin': CONFIG.corsOrigin,
-      'Access-Control-Allow-Headers': 'Content-Type, X-Session-ID'
+      'Access-Control-Allow-Headers': 'Content-Type, X-Session-ID',
+      'X-Session-ID': sessionId
     });
 
-    // Store connection
+    // Store connection with session binding
     this.sseConnections.set(sessionId, res);
+    
+    // Update session with connection info
+    session.lastActivity = Date.now();
+    session.connection = {
+      type: 'sse',
+      established: Date.now()
+    };
 
-    Logger.info('SSE connection established', { sessionId });
+    Logger.info('SSE connection established', { sessionId, transport: 'streamable-http' });
 
-    // Send initial connection event
-    this.sendSSEEvent(sessionId, 'connected', { sessionId, timestamp: new Date().toISOString() });
+    // Send initial connection event with session details
+    this.sendSSEEvent(sessionId, 'connected', { 
+      sessionId, 
+      timestamp: new Date().toISOString(),
+      transport: 'streamable-http',
+      initialized: session.initialized || false
+    });
 
     // Handle connection close
     req.on('close', () => {
       this.sseConnections.delete(sessionId);
-      this.sessionManager.removeSession(sessionId);
-      Logger.info('SSE connection closed', { sessionId });
+      
+      // Update session but don't remove it immediately - allow for reconnection
+      const currentSession = this.sessionManager.getSession(sessionId);
+      if (currentSession) {
+        currentSession.connection = null;
+        currentSession.lastActivity = Date.now();
+        Logger.info('SSE connection closed, session preserved for reconnection', { sessionId });
+        
+        // Set a timeout to remove session if no reconnection within timeout period
+        setTimeout(() => {
+          const stillExists = this.sessionManager.getSession(sessionId);
+          if (stillExists && !this.sseConnections.has(sessionId)) {
+            this.sessionManager.removeSession(sessionId);
+            Logger.info('SSE session expired after no reconnection', { sessionId });
+          }
+        }, CONFIG.sessionTimeout * 1000 / 4); // 1/4 of normal timeout for reconnection
+      } else {
+        Logger.info('SSE connection closed', { sessionId });
+      }
     });
 
     // Keep alive
@@ -1599,12 +1772,29 @@ class StreamableHTTPTransport extends HTTPTransport {
 
   async handleSSERequest(jsonRpcRequest, sessionId) {
     try {
+      // Update session activity
+      const session = this.sessionManager.getSession(sessionId);
+      if (session) {
+        session.lastActivity = Date.now();
+      }
+
       const response = await this.handleMCPRequest(jsonRpcRequest, sessionId);
-      this.sendSSEEvent(sessionId, 'response', response);
+      
+      // Only send response for non-notification requests
+      if (response !== null) {
+        this.sendSSEEvent(sessionId, 'response', response);
+      }
     } catch (error) {
+      Logger.error('SSE request handling error', { 
+        error: error.message, 
+        method: jsonRpcRequest.method,
+        sessionId 
+      });
+      
       this.sendSSEEvent(sessionId, 'error', { 
         error: error.message, 
-        id: jsonRpcRequest.id 
+        id: jsonRpcRequest.id,
+        method: jsonRpcRequest.method
       });
     }
   }
